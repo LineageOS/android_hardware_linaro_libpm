@@ -13,14 +13,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#define LOG_TAG "android.hardware.thermal@2.0-service.linaro-generic"
+#define LOG_TAG "android.hardware.thermal-service.linaro-generic"
 
-#include <android-base/logging.h>
-#include <hidl/HidlTransportSupport.h>
 #include "Thermal.h"
 
-using ::android::OK;
-using ::android::status_t;
+#include <android-base/logging.h>
+#include <android/binder_manager.h>
+#include <android/binder_process.h>
+#include <hidl/HidlTransportSupport.h>
 
 // libhwbinder:
 using ::android::hardware::setupTransportPolling;
@@ -29,9 +29,7 @@ using ::android::hardware::handleTransportPoll;
 // libutils:
 using ::android::Looper;
 
-// Generated HIDL files:
-using ::android::hardware::thermal::V2_0::IThermal;
-using ::android::hardware::thermal::V2_0::implementation::Thermal;
+using aidl::android::hardware::thermal::impl::linaro_generic::Thermal;
 
 /*
  * TODO : more accurate exit values
@@ -70,12 +68,11 @@ static bool setupTransportCallback(Looper *looper)
 
 int main(int /* argc */, char** /* argv */)
 {
-
-	status_t status;
-	Thermal *service;
+	ABinderProcess_setThreadPoolMaxThreadCount(0);
+	std::shared_ptr<Thermal> thermal;
 	Looper *looper;
 
-	LOG(DEBUG) << "Thermal HAL Service generic 2.0 starting...";
+	LOG(DEBUG) << "Thermal HAL Service generic starting...";
 
 	looper = new Looper(false);
 	if (looper == nullptr) {
@@ -84,8 +81,8 @@ int main(int /* argc */, char** /* argv */)
 	}
 
 	try {
-		service = new Thermal(looper);
-		if (service == nullptr) {
+		thermal = ndk::SharedRefBase::make<Thermal>(looper);
+		if (thermal == nullptr) {
 			LOG(ERROR) << "Error creating an instance of ThermalHAL.  Exiting...";
 			return shutdown(THERMAL_HAL_INTERNAL_ERROR);
 		}
@@ -107,15 +104,13 @@ int main(int /* argc */, char** /* argv */)
 		return shutdown(THERMAL_HAL_INTERNAL_ERROR);
 	}
 
-	status = service->registerAsService("default");
-	if (status != OK) {
-		LOG(ERROR) << "Could not register service for ThermalHAL (" << status << ")";
-		return shutdown(THERMAL_HAL_INTERNAL_ERROR);
-	}
+	const std::string instance = std::string() + Thermal::descriptor + "/default";
+	binder_status_t status =
+            AServiceManager_addService(thermal->asBinder().get(), instance.c_str());
+	CHECK(status == STATUS_OK);
 
-	LOG(INFO) << "Thermal Service started successfully.";
-
+	ABinderProcess_joinThreadPool();
 	looper->pollAll(-1);
 
-	return shutdown(THERMAL_HAL_OK);
+	return EXIT_FAILURE;  // should not reach
 }

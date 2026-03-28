@@ -23,17 +23,15 @@ package {
 }
 
 cc_binary {
-    name: "android.hardware.thermal@2.0-service.linaro-generic",
-    defaults: ["hidl_defaults"],
+    name: "android.hardware.thermal-service.linaro-generic",
     relative_install_path: "hw",
     vendor: true,
-    init_rc: ["android.hardware.thermal@2.0-service.linaro-generic.rc"],
-    vintf_fragments: ["android.hardware.thermal@2.0-service.linaro-generic.xml"],
+    init_rc: ["android.hardware.thermal-service.linaro-generic.rc"],
+    vintf_fragments: ["android.hardware.thermal-service.linaro-generic.xml"],
 
     srcs: [
         "Thermal.cpp",
         "Config.cpp",
-        "CpuInfo.cpp",
         "LibThermal.cpp",
         "service.cpp"
     ],
@@ -44,8 +42,8 @@ cc_binary {
         "libhidlbase",
         "libutils",
 	"libjsoncpp",
-        "android.hardware.thermal@2.0",
-        "android.hardware.thermal@1.0",
+	"libbinder_ndk",
+	"android.hardware.thermal-V3-ndk",
     ],
 
     header_libs: [
@@ -53,8 +51,4 @@ cc_binary {
     ],
 
     cflags: ["-fexceptions"],
-
-    strip: {
-        none: true,
-    },
 }

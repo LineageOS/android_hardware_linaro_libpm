@@ -13,83 +13,55 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#ifndef ANDROID_HARDWARE_THERMAL_V2_0_THERMAL_H
-#define ANDROID_HARDWARE_THERMAL_V2_0_THERMAL_H
+#ifndef ANDROID_HARDWARE_THERMAL_LINARO_GENERIC_THERMAL_H
+#define ANDROID_HARDWARE_THERMAL_LINARO_GENERIC_THERMAL_H
 
-#include <android/hardware/thermal/2.0/IThermal.h>
-#include <android/hardware/thermal/2.0/IThermalChangedCallback.h>
-#include <hidl/MQDescriptor.h>
-#include <hidl/Status.h>
+#include <aidl/android/hardware/thermal/BnThermal.h>
 
 #include <utils/Looper.h>
 
 #include "Config.h"
-#include "CpuInfo.h"
 #include "LibThermal.h"
 
+namespace aidl {
 namespace android {
 namespace hardware {
 namespace thermal {
-namespace V2_0 {
-namespace implementation {
+namespace impl {
+namespace linaro_generic {
 
-using ::android::sp;
-using ::android::hardware::hidl_array;
-using ::android::hardware::hidl_memory;
-using ::android::hardware::hidl_string;
-using ::android::hardware::hidl_vec;
-using ::android::hardware::Return;
-using ::android::hardware::Void;
-using ::android::hardware::thermal::V1_0::CpuUsage;
-using ::android::hardware::thermal::V2_0::CoolingType;
-using ::android::hardware::thermal::V2_0::IThermal;
-using CoolingDevice_1_0 = ::android::hardware::thermal::V1_0::CoolingDevice;
-using CoolingDevice_2_0 = ::android::hardware::thermal::V2_0::CoolingDevice;
-using TemperatureType_1_0 = ::android::hardware::thermal::V1_0::Temperature;
-using TemperatureType_2_0 = ::android::hardware::thermal::V2_0::Temperature;
-using ::android::hardware::thermal::V2_0::IThermalChangedCallback;
-using ::android::hardware::thermal::V2_0::TemperatureThreshold;
-using ::android::hardware::thermal::V2_0::TemperatureType;
+using ::android::Looper;
+using ::android::LooperCallback;
 
-struct CallbackSetting {
-    CallbackSetting(sp<IThermalChangedCallback> callback, bool is_filter_type, TemperatureType type)
-	    : callback(std::move(callback)), is_filter_type(is_filter_type), type(type) {}
-	sp<IThermalChangedCallback> callback;
-	bool is_filter_type;
+struct ThermalCallbackSetting {
+    ThermalCallbackSetting(std::shared_ptr<IThermalChangedCallback> callback, TemperatureType type)
+	    : callback(std::move(callback)), type(type) {}
+	std::shared_ptr<IThermalChangedCallback> callback;
 	TemperatureType type;
 };
 
-class ThermalLooperCallback : public LooperCallback {
-
-public:
-	int handleEvent(int fd, int events, void* data);
-};
-
-class Thermal : public LibThermal, public IThermal {
+class Thermal : public LibThermal, public BnThermal {
    public:
-	// Methods from ::android::hardware::thermal::V1_0::IThermal follow.
-	Return<void> getTemperatures(getTemperatures_cb _hidl_cb) override;
+	// Methods from android.hardware.thermal V1 follow.
+	ndk::ScopedAStatus getTemperatures(std::vector<Temperature>* out_temperatures) override;
+	ndk::ScopedAStatus getTemperaturesWithType(TemperatureType in_type, std::vector<Temperature>* out_temperatures) override;
 
-	Return<void> getCpuUsages(getCpuUsages_cb _hidl_cb) override;
+	ndk::ScopedAStatus getCoolingDevices(std::vector<CoolingDevice>* out_devices) override;
+	ndk::ScopedAStatus getCoolingDevicesWithType(CoolingType in_type, std::vector<CoolingDevice>* out_devices) override;
 
-	Return<void> getCoolingDevices(getCoolingDevices_cb _hidl_cb) override;
+	ndk::ScopedAStatus getTemperatureThresholds(std::vector<TemperatureThreshold>* out_temperatureThresholds) override;
+	ndk::ScopedAStatus getTemperatureThresholdsWithType(TemperatureType in_type, std::vector<TemperatureThreshold>* out_temperatureThresholds) override;
 
-	// Methods from ::android::hardware::thermal::V2_0::IThermal follow.
-	Return<void> getCurrentTemperatures(bool filterType, TemperatureType type,
-					    getCurrentTemperatures_cb _hidl_cb) override;
+	ndk::ScopedAStatus registerThermalChangedCallback(const std::shared_ptr<IThermalChangedCallback>& in_callback) override;
+	ndk::ScopedAStatus registerThermalChangedCallbackWithType(const std::shared_ptr<IThermalChangedCallback>& in_callback, TemperatureType in_type) override;
+	ndk::ScopedAStatus unregisterThermalChangedCallback(const std::shared_ptr<IThermalChangedCallback>& in_callback) override;
 
-	Return<void> getTemperatureThresholds(bool filterType, TemperatureType type,
-					      getTemperatureThresholds_cb _hidl_cb) override;
+	// Methods from android.hardware.thermal V2 follow.
+	ndk::ScopedAStatus registerCoolingDeviceChangedCallbackWithType(const std::shared_ptr<ICoolingDeviceChangedCallback>& in_callback, CoolingType in_type) override;
+	ndk::ScopedAStatus unregisterCoolingDeviceChangedCallback(const std::shared_ptr<ICoolingDeviceChangedCallback>& in_callback) override;
 
-	Return<void> registerThermalChangedCallback(const sp<IThermalChangedCallback> &callback,
-						    bool filterType, TemperatureType type,
-						    registerThermalChangedCallback_cb _hidl_cb) override;
-
-	Return<void> unregisterThermalChangedCallback(const sp<IThermalChangedCallback> &callback,
-						      unregisterThermalChangedCallback_cb _hidl_cb) override;
-
-	Return<void> getCurrentCoolingDevices(bool filterType, CoolingType type,
-					      getCurrentCoolingDevices_cb _hidl_cb) override;
+	// Methods from android.hardware.thermal V3 follow.
+	ndk::ScopedAStatus forecastSkinTemperature(int32_t forecastSeconds, float* _aidl_return) override;
 
 	int handleThermalEvents(void);
 
@@ -113,25 +85,23 @@ private:
 	static int cdevUpdate(int cdev_id, int state, void *arg);
 	static int govChange(int tz_id, const char *name, void *arg);
 
-	sp<ThermalLooperCallback> m_thermalLooperCallback;
-
-	void thermalChangedCallback(Temperature_2_0 &temperature);
+	void thermalChangedCallback(Temperature &temperature);
 
 	ThrottlingSeverity throttlingSeverity(const std::string &name, float temperature);
 
 	int tripCrossed(int tz_id, int trip_id, int temp, Thermal *thermal, bool up);
 
 	Config m_config;
-	CpuInfo m_cpuInfo;
 
 	std::mutex m_callback_mutex;
-	std::vector<CallbackSetting> m_callbacks;
+	std::vector<ThermalCallbackSetting> m_callbacks;
 };
 
-}  // namespace implementation
-}  // namespace V2_0
+}  // namespace linaro_generic
+}  // namespace impl
 }  // namespace thermal
 }  // namespace hardware
 }  // namespace android
+}  // namespace aidl
 
-#endif  // ANDROID_HARDWARE_THERMAL_V2_0_THERMAL_H
+#endif  // ANDROID_HARDWARE_THERMAL_LINARO_GENERIC_THERMAL_H
