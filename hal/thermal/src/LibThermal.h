@@ -17,11 +17,12 @@
 
 #include <thermal.h>
 
+namespace aidl {
 namespace android {
 namespace hardware {
 namespace thermal {
-namespace V2_0 {
-namespace implementation {
+namespace impl {
+namespace linaro_generic {
 
 class LibThermalCallbacks {
 public:
@@ -80,8 +81,9 @@ public:
 	std::string getThermalZoneName(int id);
 };
 
-}  // namespace implementation
-}  // namespace V2_0
+}  // namespace linaro_generic
+}  // namespace impl
 }  // namespace thermal
 }  // namespace hardware
 }  // namespace android
+}  // namespace aidl

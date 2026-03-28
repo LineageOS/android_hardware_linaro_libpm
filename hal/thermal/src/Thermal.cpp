@@ -13,29 +13,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#define LOG_TAG "android.hardware.thermal@2.0-service.linaro-generic"
+#define LOG_TAG "android.hardware.thermal-service.linaro-generic"
 
 #include <cmath>
 #include <set>
 
 #include <android-base/logging.h>
-#include <hidl/HidlTransportSupport.h>
 
 #include "Thermal.h"
 
+namespace aidl {
 namespace android {
 namespace hardware {
 namespace thermal {
-namespace V2_0 {
-namespace implementation {
-
-using ::android::sp;
-using ::android::hardware::interfacesEqual;
-using ::android::hardware::thermal::V1_0::ThermalStatus;
-using ::android::hardware::thermal::V1_0::ThermalStatusCode;
+namespace impl {
+namespace linaro_generic {
 
 // -----------------------------------------------------------------------------
-// Methods from ::android::hardware::thermal::V1_0::IThermal follow.
+// Methods from ::android.hardware.thermal V1 follow.
 // -----------------------------------------------------------------------------
 
 /**
@@ -52,50 +47,30 @@ using ::android::hardware::thermal::V1_0::ThermalStatusCode;
  *         always returns and never removes such temperatures.
  *
  */
-Return<void> Thermal::getTemperatures(getTemperatures_cb _hidl_cb)
+ndk::ScopedAStatus Thermal::getTemperatures(std::vector<Temperature>* temperatures)
 {
-	ThermalStatus status = { . code = ThermalStatusCode::SUCCESS };
+	for (auto &p : m_config.m_temperature) {
+		int temperature = getThermalZonetemp(p.name);
 
-	for (auto &p : this->m_config.m_temperature_1_0) {
-
-		std::string name = p.name;
-		int temperature;
-
-		temperature = this->getThermalZonetemp(name);
-		if (temperature == INT_MAX) {
-			LOG(ERROR) << "Failed to read \"" << name << "\" temperature";
-			continue;
-		}
-
-		p.currentValue = temperature / 1000;
+		if (temperature != INT_MAX)
+			p.value = temperature / 1000.0;
 	}
 
-	_hidl_cb(status, m_config.m_temperature_1_0);
+	*temperatures = m_config.m_temperature;
 
-	return Void();
+	return ndk::ScopedAStatus::ok();
 }
 
-/**
- * Retrieves CPU usage information of each core: active and total times
- * in ms since first boot.
- *
- * @return status Status of the operation. If status code is FAILURE,
- *         the status.debugMessage must be populated with the human-readable
- *         error message.
- * @return cpuUsages If status code is SUCCESS, it's filled with the current
- *         CPU usages. The order and number of CPUs in the list must be kept
- *         the same regardless the number of calls to this method.
- *
- */
-Return<void> Thermal::getCpuUsages(getCpuUsages_cb _hidl_cb)
+ndk::ScopedAStatus Thermal::getTemperaturesWithType(TemperatureType in_type, std::vector<Temperature>* temperatures)
 {
-	ThermalStatus status = { .code = ThermalStatusCode::SUCCESS };
-	hidl_vec<CpuUsage> cpuUsages;
+	std::vector<Temperature> updated_temps;
+	getTemperatures(&updated_temps);
 
-	if (m_cpuInfo.CpuUsages(cpuUsages))
-		_hidl_cb(status, cpuUsages);
+	for (auto p : updated_temps)
+		if (p.type == in_type)
+			temperatures->push_back(p);
 
-	return Void();
+	return ndk::ScopedAStatus::ok();
 }
 
 /**
@@ -112,23 +87,27 @@ Return<void> Thermal::getCpuUsages(getCpuUsages_cb _hidl_cb)
  *         the list such cooling devices.
  *
  */
-Return<void> Thermal::getCoolingDevices(getCoolingDevices_cb _hidl_cb)
+ndk::ScopedAStatus Thermal::getCoolingDevices(std::vector<CoolingDevice>* coolingDevices)
 {
-	ThermalStatus status = { .code = ThermalStatusCode::SUCCESS };
+	if (m_config.m_cooling_device.empty())
+		return ndk::ScopedAStatus::fromExceptionCodeWithMessage(EX_SERVICE_SPECIFIC, strerror(-ENODEV));
 
-	if (this->m_config.m_cooling_device_1_0.empty()) {
-		status.code = ThermalStatusCode::FAILURE;
-		status.debugMessage = "No cooling devices";
-	}
+	*coolingDevices = m_config.m_cooling_device;
 
-	_hidl_cb(status, this->m_config.m_cooling_device_1_0);
-
-	return Void();
+	return ndk::ScopedAStatus::ok();
 }
 
-// -----------------------------------------------------------------------------
-// Methods from ::android::hardware::thermal::V2_0::IThermal follow.
-// -----------------------------------------------------------------------------
+ndk::ScopedAStatus Thermal::getCoolingDevicesWithType(CoolingType in_type, std::vector<CoolingDevice>* coolingDevices)
+{
+	if (m_config.m_cooling_device.empty())
+		return ndk::ScopedAStatus::fromExceptionCodeWithMessage(EX_SERVICE_SPECIFIC, strerror(-ENODEV));
+
+	for (auto &p : m_config.m_cooling_device)
+		if (p.type == in_type)
+			coolingDevices->push_back(p);
+
+	return ndk::ScopedAStatus::ok();
+}
 
 /**
  * Retrieves static temperature thresholds in Celsius.
@@ -152,122 +131,35 @@ Return<void> Thermal::getCoolingDevices(getCoolingDevices_cb _hidl_cb)
  *    and listen to the callback.
  *
  */
-Return<void> Thermal::getTemperatureThresholds(bool filterType, TemperatureType type,
-                                               getTemperatureThresholds_cb _hidl_cb)
+ndk::ScopedAStatus Thermal::getTemperatureThresholds(std::vector<TemperatureThreshold>* out_temperatureThresholds)
 {
-	ThermalStatus status = { .code = ThermalStatusCode::SUCCESS };
-	std::vector<TemperatureThreshold> thresholds;
+	if (m_config.m_threshold.empty())
+		return ndk::ScopedAStatus::fromExceptionCodeWithMessage(EX_SERVICE_SPECIFIC, strerror(-ENODEV));
 
-	for (auto const& p : this->m_config.m_threshold) {
+	for (auto &p : m_config.m_threshold)
+		out_temperatureThresholds->push_back(p.second);
 
-		if (filterType && (type != p.second.type))
-			continue;
-
-		thresholds.push_back(p.second);
-	}
-
-	if (thresholds.empty()) {
-		status.code = ThermalStatusCode::FAILURE;
-		status.debugMessage = "No threshold temperature matching the type \"" + toString(type) + "\"";
-	}
-
-	_hidl_cb(status, thresholds);
-
-	return Void();
+	return ndk::ScopedAStatus::ok();
 }
 
-/**
- * Retrieves temperatures in Celsius.
- *
- * @param filterType whether to filter the result for a given type.
- * @param type the TemperatureType such as battery or skin.
- *
- * @return status Status of the operation. If status code is FAILURE,
- *    the status.debugMessage must be populated with a human-readable
- *    error message.
- *
- * @return temperatures If status code is SUCCESS, it's filled with the
- *    current temperatures. The order of temperatures of built-in
- *    devices (such as CPUs, GPUs and etc.) in the list must be kept
- *    the same regardless of the number of calls to this method even if
- *    they go offline, if these devices exist on boot. The method
- *    always returns and never removes such temperatures.
- *
- */
-Return<void> Thermal::getCurrentTemperatures(bool filterType, TemperatureType type,
-                                             getCurrentTemperatures_cb _hidl_cb)
+ndk::ScopedAStatus Thermal::getTemperatureThresholdsWithType(TemperatureType in_type, std::vector<TemperatureThreshold>* out_temperatureThresholds)
 {
-	ThermalStatus status = { .code = ThermalStatusCode::SUCCESS };
-	std::vector<Temperature_2_0> temperatures;
+	if (m_config.m_threshold.empty())
+		return ndk::ScopedAStatus::fromExceptionCodeWithMessage(EX_SERVICE_SPECIFIC, strerror(-ENODEV));
 
-	for (auto &p : this->m_config.m_temperature_2_0) {
+	for (auto &p : m_config.m_threshold)
+		if (p.second.type == in_type)
+			out_temperatureThresholds->push_back(p.second);
 
-		std::string name = p.name;
-		int temperature;
-
-		if (filterType && (type != p.type))
-			continue;
-
-		temperature = this->getThermalZonetemp(name);
-		if (temperature == INT_MAX) {
-			LOG(ERROR) << "Failed to read \"" << name << "\" temperature";
-			continue;
-		}
-
-		p.value = temperature / 1000;
-		temperatures.push_back(p);
-	}
-
-	if (temperatures.empty()) {
-		status.code = ThermalStatusCode::FAILURE;
-		status.debugMessage = "No temperature matching the type \"" + toString(type) + "\"";
-	}
-
-	_hidl_cb(status, temperatures);
-
-	return Void();
+	return ndk::ScopedAStatus::ok();
 }
 
-/**
- * Retrieves the cooling devices information.
- *
- * @param filterType whether to filter the result for a given type.
- * @param type the CoolingDevice such as CPU/GPU.
- *
- * @return status Status of the operation. If status code is FAILURE,
- *    the status.debugMessage must be populated with the human-readable
- *    error message.
- * @return devices If status code is SUCCESS, it's filled with the current
- *    cooling device information. The order of built-in cooling
- *    devices in the list must be kept the same regardless of the number
- *    of calls to this method even if they go offline, if these devices
- *    exist on boot. The method always returns and never removes from
- *    the list such cooling devices.
- *
- */
-Return<void> Thermal::getCurrentCoolingDevices(bool filterType, CoolingType type,
-                                               getCurrentCoolingDevices_cb _hidl_cb)
-{
-	ThermalStatus status = { .code = ThermalStatusCode::SUCCESS };
-
-	std::vector<CoolingDevice_2_0> cooling_devices;
-
-	for (auto const& p : this->m_config.m_cooling_device_2_0) {
-
-		if (filterType && (type != p.type))
-			continue;
-
-		cooling_devices.push_back(p);
-	}
-
-	if (cooling_devices.empty()) {
-		status.code = ThermalStatusCode::FAILURE;
-		status.debugMessage = "No cooling device matching the type \"" + toString(type) + "\"";
-	}
-
-	_hidl_cb(status, cooling_devices);
-
-	return Void();
+static bool interfacesEqual(const std::shared_ptr<::ndk::ICInterface>& left,
+                            const std::shared_ptr<::ndk::ICInterface>& right) {
+    if (left == nullptr || right == nullptr || !left->isRemote() || !right->isRemote()) {
+        return left == right;
+    }
+    return left->asBinder() == right->asBinder();
 }
 
 /**
@@ -286,36 +178,30 @@ Return<void> Thermal::getCurrentCoolingDevices(bool filterType, CoolingType type
  *    the status.debugMessage must be populated with a human-readable error message.
  *
  */
-Return<void> Thermal::registerThermalChangedCallback(const sp<IThermalChangedCallback> &callback,
-                                                     bool filterType, TemperatureType type,
-                                                     registerThermalChangedCallback_cb _hidl_cb)
+ndk::ScopedAStatus Thermal::registerThermalChangedCallback(const std::shared_ptr<IThermalChangedCallback>& in_callback)
 {
-	ThermalStatus status = { .code = ThermalStatusCode::SUCCESS };
+	return registerThermalChangedCallbackWithType(in_callback, TemperatureType::UNKNOWN);
+}
+
+ndk::ScopedAStatus Thermal::registerThermalChangedCallbackWithType(const std::shared_ptr<IThermalChangedCallback>& in_callback, TemperatureType in_type)
+{
 	std::lock_guard<std::mutex> cbLock(m_callback_mutex);
 
-	if (callback == nullptr) {
-		status.code = ThermalStatusCode::FAILURE;
-		status.debugMessage = "Invalid thermal changed callback (null)";
-		goto out;
-	}
+	if (in_callback == nullptr)
+		return ndk::ScopedAStatus::fromExceptionCodeWithMessage(EX_ILLEGAL_ARGUMENT, "Invalid nullptr callback");
 
 	if (std::any_of(m_callbacks.begin(),
 			m_callbacks.end(),
-			[&](const CallbackSetting& c) {
-				return interfacesEqual(c.callback, callback);
-			})) {
-		status.code = ThermalStatusCode::FAILURE;
-		status.debugMessage = "Same callback interface already registered";
-		goto out;
-	}
+			[&](const ThermalCallbackSetting& c) {
+				return interfacesEqual(c.callback, in_callback);
+			}))
+		return ndk::ScopedAStatus::fromExceptionCodeWithMessage(EX_ILLEGAL_ARGUMENT, "Callback already registered");
 
-	m_callbacks.emplace_back(callback, filterType, type);
+	m_callbacks.emplace_back(in_callback, in_type);
 
-	LOG(DEBUG) << "A callback has been registered to ThermalHAL, isFilter: "
-		   << filterType << " " << toString(type);
-out:
-	_hidl_cb(status);
-	return Void();
+	LOG(DEBUG) << "A thermal callback has been registered to ThermalHAL:" << toString(in_type);
+
+	return ndk::ScopedAStatus::ok();
 }
 
 /**
@@ -329,38 +215,28 @@ out:
  *    the status.debugMessage must be populated with a human-readable error message.
  *
  */
-Return<void> Thermal::unregisterThermalChangedCallback(const sp<IThermalChangedCallback> &callback,
-						       unregisterThermalChangedCallback_cb _hidl_cb)
+ndk::ScopedAStatus Thermal::unregisterThermalChangedCallback(const std::shared_ptr<IThermalChangedCallback>& in_callback)
 {
-	ThermalStatus status = { .code = ThermalStatusCode::SUCCESS };
 	std::lock_guard<std::mutex> cbLock(m_callback_mutex);
-	std::vector<CallbackSetting>::iterator it;
+	std::vector<ThermalCallbackSetting>::iterator it;
 
-	if (callback == nullptr) {
-		status.code = ThermalStatusCode::FAILURE;
-		status.debugMessage = "Invalid thermal changed callback (null)";
-		goto out;
-	}
+	if (in_callback == nullptr)
+		return ndk::ScopedAStatus::fromExceptionCodeWithMessage(EX_ILLEGAL_ARGUMENT, "Invalid nullptr callback");
 
 	it = std::remove_if(m_callbacks.begin(), m_callbacks.end(),
-			    [&](const CallbackSetting& c) {
-				    return interfacesEqual(c.callback, callback);
+			    [&](const ThermalCallbackSetting& c) {
+				    return interfacesEqual(c.callback, in_callback);
 			    });
 
-	if (it == m_callbacks.end()) {
-		status.code = ThermalStatusCode::FAILURE;
-		status.debugMessage = "The callback was not registered before";
-		goto out;
-	}
+	if (it == m_callbacks.end())
+		return ndk::ScopedAStatus::fromExceptionCodeWithMessage(EX_ILLEGAL_ARGUMENT, "Callback wasn't registered");
 
-	LOG(DEBUG) << "A callback has been unregistered from ThermalHAL, isFilter: "
-		   << (*it).is_filter_type << " Type: " << toString((*it).type);
+	LOG(DEBUG) << "A thermal callback has been unregistered from ThermalHAL, "
+		   << " Type: " << toString((*it).type);
 
 	m_callbacks.erase(it);
-out:
-	_hidl_cb(status);
 
-	return Void();
+	return ndk::ScopedAStatus::ok();
 }
 
 /**
@@ -378,10 +254,10 @@ out:
  * @param temperature the temperature sensor where the event happen
  *
  */
-void Thermal::thermalChangedCallback(Temperature_2_0 &temperature)
+void Thermal::thermalChangedCallback(Temperature &temperature)
 {
 	for (auto &c : m_callbacks) {
-		if (c.is_filter_type && c.type != temperature.type)
+		if (c.type != TemperatureType::UNKNOWN && c.type != temperature.type)
 			continue;
 
 		c.callback->notifyThrottling(temperature);
@@ -418,7 +294,7 @@ ThrottlingSeverity Thermal::throttlingSeverity(const std::string &name, float te
 
 	threshold = m_config.m_threshold[name];
 
-	for (const auto ts : hidl_enum_range<V2_0::ThrottlingSeverity>()) {
+	for (std::underlying_type<ThrottlingSeverity>::type ts = std::__to_underlying(ThrottlingSeverity::NONE); ts <= std::__to_underlying(ThrottlingSeverity::SHUTDOWN); ts++) {
 
 		if (std::isnan(threshold.hotThrottlingThresholds[(int)ts]))
 			continue;
@@ -426,7 +302,7 @@ ThrottlingSeverity Thermal::throttlingSeverity(const std::string &name, float te
 		if (temperature < threshold.hotThrottlingThresholds[(int)ts])
 			break;
 
-		severity = ts;
+		severity = static_cast<ThrottlingSeverity>(ts);
 	}
 
 	LOG(DEBUG) << "Throttle severity=" << toString(severity)
@@ -571,7 +447,7 @@ int Thermal::tripCrossed(int tz_id, int trip_id, int temp, Thermal *thermal, boo
 		return -1;
 	}
 
-	for (auto &p : thermal->m_config.m_temperature_2_0) {
+	for (auto &p : thermal->m_config.m_temperature) {
 
 		if (p.name != name)
 			continue;
@@ -876,7 +752,7 @@ int Thermal::handleThermalEvents(void)
  *
  * @return 1
  */
-int ThermalLooperCallback::handleEvent(__attribute__((unused))int fd,
+static int thermalHandleEvent(__attribute__((unused))int fd,
 				       __attribute__((unused))int events, void *data)
 {
 	Thermal *thermal = (typeof(thermal))data;
@@ -914,12 +790,13 @@ Thermal::Thermal(Looper *looper)
 	m_ops.events.gov_change  = govChange;
 
 	if (!looper->addFd(thermal_events_fd(this->m_th), 0,
-			   Looper::EVENT_INPUT, m_thermalLooperCallback, this))
+			   Looper::EVENT_INPUT, thermalHandleEvent, this))
 		throw("Failed to add thermal file descriptor to the mainloop");
 }
 
-}  // namespace implementation
-}  // namespace V2_0
+}  // namespace linaro_generic
+}  // namespace impl
 }  // namespace thermal
 }  // namespace hardware
 }  // namespace android
+}  // namespace aidl

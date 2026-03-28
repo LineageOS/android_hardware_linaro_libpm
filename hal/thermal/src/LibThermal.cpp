@@ -14,15 +14,15 @@
  * limitations under the License.
  */
 #include <android-base/logging.h>
-#include <hidl/HidlTransportSupport.h>
 
 #include "LibThermal.h"
 
+namespace aidl {
 namespace android {
 namespace hardware {
 namespace thermal {
-namespace V2_0 {
-namespace implementation {
+namespace impl {
+namespace linaro_generic {
 
 struct thermal_zone *LibThermal::getThermalZone(int id)
 {
@@ -97,8 +97,9 @@ LibThermal::LibThermal(void)
 		throw("Failed to discover the thermal zones");
 }
 
-}  // namespace implementation
-}  // namespace V2_0
+}  // namespace linaro_generic
+}  // namespace impl
 }  // namespace thermal
 }  // namespace hardware
 }  // namespace android
+}  // namespace aidl
