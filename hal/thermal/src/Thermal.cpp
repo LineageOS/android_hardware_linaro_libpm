@@ -789,6 +789,28 @@ Thermal::Thermal(Looper *looper)
 	if (!this->m_config.init())
 		throw("ThermalHAL failed to initialize the configuration");
 
+	for (auto it = m_config.m_temperature.begin(); it != m_config.m_temperature.end(); ) {
+		if (!thermalZoneExists((*it).name)) {
+			if (std::find(m_config.m_optional.begin(), m_config.m_optional.end(), (*it).name) == m_config.m_optional.end())
+				throw("ThermalHAL missing required sensor");
+
+			it = m_config.m_temperature.erase(it);
+		} else {
+			++it;
+		}
+	}
+
+	for (auto it = m_config.m_cooling_device.begin(); it != m_config.m_cooling_device.end(); ) {
+		if (!thermalCdevExists((*it).name)) {
+			if (std::find(m_config.m_optional.begin(), m_config.m_optional.end(), (*it).name) == m_config.m_optional.end())
+				throw("ThermalHAL missing required cooling device");
+
+			it = m_config.m_cooling_device.erase(it);
+		} else {
+			++it;
+		}
+	}
+
 	/*
 	 * The Thermal class is inherited from the LibThermal. The
 	 * constructor of the Libthermal will initialize itself. We

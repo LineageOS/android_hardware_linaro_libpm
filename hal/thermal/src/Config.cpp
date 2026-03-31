@@ -158,6 +158,9 @@ bool Config::readSensor(Json::Value &sensor)
 
 	m_temperature.push_back(temperature);
 
+	if (sensor.get("Optional", false).asBool())
+		m_optional.push_back(name);
+
 	/*
 	 * The skin temperature sensors are special ones and are
 	 * stored in a second list for quick access for monitoring
@@ -197,6 +200,9 @@ bool Config::readCoolingDevice(Json::Value &coolingDeviceNode)
 	}
 
 	m_cooling_device.push_back(coolingDevice);
+
+	if (coolingDeviceNode.get("Optional", false).asBool())
+		m_optional.push_back(name);
 
 	return true;
 }
