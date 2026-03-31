@@ -77,6 +77,11 @@ public:
 	 */
 	std::vector<std::string> m_skin_sensors;
 
+	/*
+	 * Contains the list of optional sensors.
+	 */
+	std::vector<std::string> m_optional;
+
 	bool init(void);
 };
 

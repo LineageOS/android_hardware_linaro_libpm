@@ -83,6 +83,11 @@ int LibThermal::getThermalZonetemp(const std::string name)
 	return getThermalZonetemp(tz);
 }
 
+bool LibThermal::thermalZoneExists(const std::string name)
+{
+	return getThermalZone(name) != NULL;
+}
+
 std::string LibThermal::getThermalZoneName(int id)
 {
 	struct thermal_zone *tz;
@@ -103,6 +108,11 @@ std::string LibThermal::getThermalCdevName(int id)
 		return std::string("");
 
 	return std::string(cdev->name);
+}
+
+bool LibThermal::thermalCdevExists(const std::string name)
+{
+	return getThermalCdev(name) != NULL;
 }
 
 LibThermal::LibThermal(void)

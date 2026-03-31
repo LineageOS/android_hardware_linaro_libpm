@@ -83,6 +83,9 @@ public:
 
 	std::string getThermalZoneName(int id);
 	std::string getThermalCdevName(int id);
+
+	bool thermalZoneExists(const std::string name);
+	bool thermalCdevExists(const std::string name);
 };
 
 }  // namespace linaro_generic
