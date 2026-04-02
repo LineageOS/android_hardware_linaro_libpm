@@ -80,6 +80,11 @@ LIBTHERMAL_API int for_each_thermal_trip(struct thermal_trip *tt, cb_tt_t cb, vo
 
 LIBTHERMAL_API int for_each_thermal_cdev(struct thermal_cdev *cdev, cb_tc_t cb, void *arg);
 
+LIBTHERMAL_API struct thermal_cdev *thermal_cdev_find_by_name(struct thermal_cdev *cdev,
+							      const char *name);
+
+LIBTHERMAL_API struct thermal_cdev *thermal_cdev_find_by_id(struct thermal_cdev *cdev, int id);
+
 LIBTHERMAL_API struct thermal_zone *thermal_zone_find_by_name(struct thermal_zone *tz,
 							      const char *name);
 
