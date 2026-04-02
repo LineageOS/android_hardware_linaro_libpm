@@ -66,11 +66,14 @@ class LibThermal {
 private:
 	struct thermal_zone *getThermalZone(int id);
 	struct thermal_zone *getThermalZone(std::string name);
+	struct thermal_cdev *getThermalCdev(int id);
+	struct thermal_cdev *getThermalCdev(std::string name);
 
 protected:
 	struct thermal_ops	 m_ops;
 	struct thermal_handler	*m_th;
 	struct thermal_zone	*m_tz;
+	struct thermal_cdev	*m_cdev;
 
 	LibThermal();
 public:
@@ -79,6 +82,7 @@ public:
 	int getThermalZonetemp(int id);
 
 	std::string getThermalZoneName(int id);
+	std::string getThermalCdevName(int id);
 };
 
 }  // namespace linaro_generic

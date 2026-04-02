@@ -24,6 +24,16 @@ namespace thermal {
 namespace impl {
 namespace linaro_generic {
 
+struct thermal_cdev *LibThermal::getThermalCdev(int id)
+{
+	return thermal_cdev_find_by_id(this->m_cdev, id);
+}
+
+struct thermal_cdev *LibThermal::getThermalCdev(std::string name)
+{
+	return thermal_cdev_find_by_name(this->m_cdev, name.c_str());
+}
+
 struct thermal_zone *LibThermal::getThermalZone(int id)
 {
 	return thermal_zone_find_by_id(this->m_tz, id);
@@ -84,6 +94,17 @@ std::string LibThermal::getThermalZoneName(int id)
 	return std::string(tz->name);
 }
 
+std::string LibThermal::getThermalCdevName(int id)
+{
+	struct thermal_cdev *cdev;
+
+	cdev = getThermalCdev(id);
+	if (!cdev)
+		return std::string("");
+
+	return std::string(cdev->name);
+}
+
 LibThermal::LibThermal(void)
 {
 	LOG(DEBUG) << "Initializing the thermal library";
@@ -95,6 +116,9 @@ LibThermal::LibThermal(void)
 	m_tz = thermal_zone_discover(m_th);
 	if (!m_tz)
 		throw("Failed to discover the thermal zones");
+
+	if (thermal_cmd_get_cdev(m_th, &m_cdev))
+		throw("Failed to discover the cooling devices");
 }
 
 }  // namespace linaro_generic

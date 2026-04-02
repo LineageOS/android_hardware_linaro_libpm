@@ -44,6 +44,37 @@ int for_each_thermal_zone(struct thermal_zone *tz, cb_tz_t cb, void *arg)
 	return ret;
 }
 
+struct thermal_cdev *thermal_cdev_find_by_name(struct thermal_cdev *cdev,
+					       const char *name)
+{
+	int i;
+
+	if (!cdev || !name)
+		return NULL;
+
+	for (i = 0; cdev[i].id != -1; i++) {
+		if (!strcmp(cdev[i].name, name))
+			return &cdev[i];
+	}
+
+	return NULL;
+}
+
+struct thermal_cdev *thermal_cdev_find_by_id(struct thermal_cdev *cdev, int id)
+{
+	int i;
+
+	if (!cdev || id < 0)
+		return NULL;
+
+	for (i = 0; cdev[i].id != -1; i++) {
+		if (cdev[i].id == id)
+			return &cdev[i];
+	}
+
+	return NULL;
+}
+
 struct thermal_zone *thermal_zone_find_by_name(struct thermal_zone *tz,
 					       const char *name)
 {
