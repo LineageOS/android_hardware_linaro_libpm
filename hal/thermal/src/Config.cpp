@@ -147,7 +147,7 @@ bool Config::readSensor(Json::Value &sensor)
 	temperature.name = name;
 	temperature.type = TemperatureType::UNKNOWN;
 
-	for (std::underlying_type<TemperatureType>::type tt = std::__to_underlying(TemperatureType::UNKNOWN); tt <= std::__to_underlying(TemperatureType::SOC); tt++) {
+	for (std::underlying_type<TemperatureType>::type tt = std::__to_underlying(TemperatureType::UNKNOWN); tt <= std::__to_underlying(TemperatureType::POGO); tt++) {
 		const std::string tempType = toString(static_cast<TemperatureType>(tt));
 
 		if (toUpper(tempType) == toUpper(type)) {
@@ -190,7 +190,7 @@ bool Config::readCoolingDevice(Json::Value &coolingDeviceNode)
 
 	coolingDevice.name = name;
 
-	for (std::underlying_type<CoolingType>::type ct = std::__to_underlying(CoolingType::FAN); ct <= std::__to_underlying(CoolingType::SPEAKER); ct++) {
+	for (std::underlying_type<CoolingType>::type ct = std::__to_underlying(CoolingType::FAN); ct <= std::__to_underlying(CoolingType::USB_PORT); ct++) {
 		const std::string coolingType = toString(static_cast<CoolingType>(ct));
 
 		if (toUpper(coolingType) == toUpper(type)) {

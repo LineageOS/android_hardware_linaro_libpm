@@ -92,6 +92,14 @@ ndk::ScopedAStatus Thermal::getCoolingDevices(std::vector<CoolingDevice>* coolin
 	if (m_config.m_cooling_device.empty())
 		return ndk::ScopedAStatus::fromExceptionCodeWithMessage(EX_SERVICE_SPECIFIC, strerror(-ENODEV));
 
+	updateThermalCdev();
+	for (auto &p : m_config.m_cooling_device) {
+		int state = getThermalCdevstate(p.name);
+
+		if (state != INT_MAX)
+			p.value = state;
+	}
+
 	*coolingDevices = m_config.m_cooling_device;
 
 	return ndk::ScopedAStatus::ok();
@@ -101,6 +109,8 @@ ndk::ScopedAStatus Thermal::getCoolingDevicesWithType(CoolingType in_type, std::
 {
 	if (m_config.m_cooling_device.empty())
 		return ndk::ScopedAStatus::fromExceptionCodeWithMessage(EX_SERVICE_SPECIFIC, strerror(-ENODEV));
+
+	updateThermalCdev();
 
 	for (auto &p : m_config.m_cooling_device)
 		if (p.type == in_type)
@@ -185,19 +195,19 @@ ndk::ScopedAStatus Thermal::registerThermalChangedCallback(const std::shared_ptr
 
 ndk::ScopedAStatus Thermal::registerThermalChangedCallbackWithType(const std::shared_ptr<IThermalChangedCallback>& in_callback, TemperatureType in_type)
 {
-	std::lock_guard<std::mutex> cbLock(m_callback_mutex);
+	std::lock_guard<std::mutex> cbLock(m_thermal_callback_mutex);
 
 	if (in_callback == nullptr)
 		return ndk::ScopedAStatus::fromExceptionCodeWithMessage(EX_ILLEGAL_ARGUMENT, "Invalid nullptr callback");
 
-	if (std::any_of(m_callbacks.begin(),
-			m_callbacks.end(),
+	if (std::any_of(m_thermal_callbacks.begin(),
+			m_thermal_callbacks.end(),
 			[&](const ThermalCallbackSetting& c) {
 				return interfacesEqual(c.callback, in_callback);
 			}))
 		return ndk::ScopedAStatus::fromExceptionCodeWithMessage(EX_ILLEGAL_ARGUMENT, "Callback already registered");
 
-	m_callbacks.emplace_back(in_callback, in_type);
+	m_thermal_callbacks.emplace_back(in_callback, in_type);
 
 	LOG(DEBUG) << "A thermal callback has been registered to ThermalHAL:" << toString(in_type);
 
@@ -217,26 +227,83 @@ ndk::ScopedAStatus Thermal::registerThermalChangedCallbackWithType(const std::sh
  */
 ndk::ScopedAStatus Thermal::unregisterThermalChangedCallback(const std::shared_ptr<IThermalChangedCallback>& in_callback)
 {
-	std::lock_guard<std::mutex> cbLock(m_callback_mutex);
+	std::lock_guard<std::mutex> cbLock(m_thermal_callback_mutex);
 	std::vector<ThermalCallbackSetting>::iterator it;
 
 	if (in_callback == nullptr)
 		return ndk::ScopedAStatus::fromExceptionCodeWithMessage(EX_ILLEGAL_ARGUMENT, "Invalid nullptr callback");
 
-	it = std::remove_if(m_callbacks.begin(), m_callbacks.end(),
+	it = std::remove_if(m_thermal_callbacks.begin(), m_thermal_callbacks.end(),
 			    [&](const ThermalCallbackSetting& c) {
 				    return interfacesEqual(c.callback, in_callback);
 			    });
 
-	if (it == m_callbacks.end())
+	if (it == m_thermal_callbacks.end())
 		return ndk::ScopedAStatus::fromExceptionCodeWithMessage(EX_ILLEGAL_ARGUMENT, "Callback wasn't registered");
 
 	LOG(DEBUG) << "A thermal callback has been unregistered from ThermalHAL, "
 		   << " Type: " << toString((*it).type);
 
-	m_callbacks.erase(it);
+	m_thermal_callbacks.erase(it);
 
 	return ndk::ScopedAStatus::ok();
+}
+
+// -----------------------------------------------------------------------------
+// Methods from android.hardware.thermal V2 follow.
+// -----------------------------------------------------------------------------
+
+ndk::ScopedAStatus Thermal::registerCoolingDeviceChangedCallbackWithType(const std::shared_ptr<ICoolingDeviceChangedCallback>& in_callback, CoolingType in_type)
+{
+	std::lock_guard<std::mutex> cbLock(m_cooling_callback_mutex);
+
+	if (in_callback == nullptr)
+		return ndk::ScopedAStatus::fromExceptionCodeWithMessage(EX_ILLEGAL_ARGUMENT, "Invalid nullptr callback");
+
+	if (std::any_of(m_cooling_callbacks.begin(),
+			m_cooling_callbacks.end(),
+			[&](const CoolingDeviceCallbackSetting& c) {
+				return interfacesEqual(c.callback, in_callback);
+			}))
+		return ndk::ScopedAStatus::fromExceptionCodeWithMessage(EX_ILLEGAL_ARGUMENT, "Callback already registered");
+
+	m_cooling_callbacks.emplace_back(in_callback, in_type);
+
+	LOG(DEBUG) << "A cooling device callback has been registered to ThermalHAL:" << toString(in_type);
+
+	return ndk::ScopedAStatus::ok();
+}
+
+ndk::ScopedAStatus Thermal::unregisterCoolingDeviceChangedCallback(const std::shared_ptr<ICoolingDeviceChangedCallback>& in_callback)
+{
+	std::lock_guard<std::mutex> cbLock(m_cooling_callback_mutex);
+	std::vector<CoolingDeviceCallbackSetting>::iterator it;
+
+	if (in_callback == nullptr)
+		return ndk::ScopedAStatus::fromExceptionCodeWithMessage(EX_ILLEGAL_ARGUMENT, "Invalid nullptr callback");
+
+	it = std::remove_if(m_cooling_callbacks.begin(), m_cooling_callbacks.end(),
+			    [&](const CoolingDeviceCallbackSetting& c) {
+				    return interfacesEqual(c.callback, in_callback);
+			    });
+
+	if (it == m_cooling_callbacks.end())
+		return ndk::ScopedAStatus::fromExceptionCodeWithMessage(EX_ILLEGAL_ARGUMENT, "Callback wasn't registered");
+
+	LOG(DEBUG) << "A cooling device callback has been unregistered from ThermalHAL, "
+		   << " Type: " << toString((*it).type);
+
+	m_cooling_callbacks.erase(it);
+
+	return ndk::ScopedAStatus::ok();
+}
+
+// -----------------------------------------------------------------------------
+// Methods from android.hardware.thermal V3 follow.
+// -----------------------------------------------------------------------------
+
+ndk::ScopedAStatus Thermal::forecastSkinTemperature(int32_t /* forecastSeconds */, float* /* _aidl_return */) {
+	return ndk::ScopedAStatus::fromExceptionCode(EX_UNSUPPORTED_OPERATION);
 }
 
 /**
@@ -256,11 +323,21 @@ ndk::ScopedAStatus Thermal::unregisterThermalChangedCallback(const std::shared_p
  */
 void Thermal::thermalChangedCallback(Temperature &temperature)
 {
-	for (auto &c : m_callbacks) {
+	for (auto &c : m_thermal_callbacks) {
 		if (c.type != TemperatureType::UNKNOWN && c.type != temperature.type)
 			continue;
 
 		c.callback->notifyThrottling(temperature);
+	}
+}
+
+void Thermal::coolingChangedCallback(CoolingDevice &coolingDevice)
+{
+	for (auto &c : m_cooling_callbacks) {
+		if (c.type != coolingDevice.type)
+			continue;
+
+		c.callback->notifyCoolingDeviceChanged(coolingDevice);
 	}
 }
 
@@ -687,6 +764,19 @@ int Thermal::cdevDelete(int cdev_id, __attribute__((unused))void *arg)
  */
 int Thermal::cdevUpdate(int cdev_id, int state, __attribute__((unused))void *arg)
 {
+	Thermal *thermal = (typeof(thermal))arg;
+	std::string name = thermal->getThermalCdevName(cdev_id);
+
+	for (auto &p : thermal->m_config.m_cooling_device) {
+
+		if (p.name != name)
+			continue;
+
+		p.value = state;
+
+		thermal->coolingChangedCallback(p);
+	}
+
 	LOG(DEBUG) << "Coolling device  " << cdev_id << " state=" << state;
 
 	return 0;

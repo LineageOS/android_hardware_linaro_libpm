@@ -84,6 +84,12 @@ public:
 	std::string getThermalZoneName(int id);
 	std::string getThermalCdevName(int id);
 
+	int getThermalCdevstate(const std::string name);
+	int getThermalCdevstate(struct thermal_cdev *tc);
+	int getThermalCdevstate(int id);
+
+	void updateThermalCdev();
+
 	bool thermalZoneExists(const std::string name);
 	bool thermalCdevExists(const std::string name);
 };

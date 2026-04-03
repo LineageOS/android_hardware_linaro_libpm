@@ -110,6 +110,45 @@ std::string LibThermal::getThermalCdevName(int id)
 	return std::string(cdev->name);
 }
 
+int LibThermal::getThermalCdevstate(struct thermal_cdev *tc)
+{
+	return tc->cur_state;
+}
+
+int LibThermal::getThermalCdevstate(int id)
+{
+	struct thermal_cdev *tc;
+
+	tc = getThermalCdev(id);
+	if (!tc) {
+		LOG(ERROR) << "Thermal cdev <id=" << id << "> not found";
+		return INT_MAX;
+	}
+
+	return getThermalCdevstate(tc);
+}
+
+int LibThermal::getThermalCdevstate(const std::string name)
+{
+	struct thermal_cdev *tc;
+
+	tc = getThermalCdev(name);
+	if (!tc) {
+		LOG(ERROR) << "Thermal cdev <" << name << "> not found";
+		return INT_MAX;
+	}
+
+	LOG(DEBUG) << "Getting state for thermal cdev "
+		   << name << " id=" << tc->id;
+
+	return getThermalCdevstate(tc);
+}
+
+void LibThermal::updateThermalCdev()
+{
+	thermal_cmd_get_cdev(this->m_th, &this->m_cdev);
+}
+
 bool LibThermal::thermalCdevExists(const std::string name)
 {
 	return getThermalCdev(name) != NULL;

@@ -40,6 +40,13 @@ struct ThermalCallbackSetting {
 	TemperatureType type;
 };
 
+struct CoolingDeviceCallbackSetting {
+    CoolingDeviceCallbackSetting(std::shared_ptr<ICoolingDeviceChangedCallback> callback, CoolingType type)
+	    : callback(std::move(callback)), type(type) {}
+	std::shared_ptr<ICoolingDeviceChangedCallback> callback;
+	CoolingType type;
+};
+
 class Thermal : public LibThermal, public BnThermal {
    public:
 	// Methods from android.hardware.thermal V1 follow.
@@ -55,6 +62,13 @@ class Thermal : public LibThermal, public BnThermal {
 	ndk::ScopedAStatus registerThermalChangedCallback(const std::shared_ptr<IThermalChangedCallback>& in_callback) override;
 	ndk::ScopedAStatus registerThermalChangedCallbackWithType(const std::shared_ptr<IThermalChangedCallback>& in_callback, TemperatureType in_type) override;
 	ndk::ScopedAStatus unregisterThermalChangedCallback(const std::shared_ptr<IThermalChangedCallback>& in_callback) override;
+
+	// Methods from android.hardware.thermal V2 follow.
+	ndk::ScopedAStatus registerCoolingDeviceChangedCallbackWithType(const std::shared_ptr<ICoolingDeviceChangedCallback>& in_callback, CoolingType in_type) override;
+	ndk::ScopedAStatus unregisterCoolingDeviceChangedCallback(const std::shared_ptr<ICoolingDeviceChangedCallback>& in_callback) override;
+
+	// Methods from android.hardware.thermal V3 follow.
+	ndk::ScopedAStatus forecastSkinTemperature(int32_t forecastSeconds, float* _aidl_return) override;
 
 	int handleThermalEvents(void);
 
@@ -79,6 +93,7 @@ private:
 	static int govChange(int tz_id, const char *name, void *arg);
 
 	void thermalChangedCallback(Temperature &temperature);
+	void coolingChangedCallback(CoolingDevice &coolingDevice);
 
 	ThrottlingSeverity throttlingSeverity(const std::string &name, float temperature);
 
@@ -86,8 +101,10 @@ private:
 
 	Config m_config;
 
-	std::mutex m_callback_mutex;
-	std::vector<ThermalCallbackSetting> m_callbacks;
+	std::mutex m_thermal_callback_mutex;
+	std::mutex m_cooling_callback_mutex;
+	std::vector<ThermalCallbackSetting> m_thermal_callbacks;
+	std::vector<CoolingDeviceCallbackSetting> m_cooling_callbacks;
 };
 
 }  // namespace linaro_generic
