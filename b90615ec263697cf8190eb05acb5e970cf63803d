@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "afaaa199_1fbcf842",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 14048
+      },
+      "writtenOn": "2026-05-04T21:52:13Z",
+      "side": 1,
+      "message": "Cooling device states are not being reported properly. Only pushed for picking atm, to pass vintf checks.",
+      "revId": "b90615ec263697cf8190eb05acb5e970cf63803d",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    }
+  ]
+}
